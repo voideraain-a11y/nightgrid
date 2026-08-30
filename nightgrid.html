@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NIGHTGRID — Meridian City's Watch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<script type="importmap">
+{ "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+</script>
+<style>
+  :root{
+    --bg:#05070c;
+    --bg-panel:#0b0f16;
+    --bg-deep:#020304;
+    --ink:#020304;
+    --cyan:#00E5FF;
+    --cyan-dim:rgba(0,229,255,0.35);
+    --magenta:#B14CFF;
+    --magenta-dim:rgba(177,76,255,0.3);
+    --alert:#FF3D5A;
+    --foreground:#EDEFF5;
+    --muted:#8A93A8;
+    --subtle:rgba(237,239,245,0.55);
+    --line:rgba(237,239,245,0.10);
+    --line-strong:rgba(237,239,245,0.18);
+    --ease:cubic-bezier(0.16,1,0.3,1);
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    background:var(--bg);
+    color:var(--foreground);
+    font-family:"Inter",system-ui,sans-serif;
+    line-height:1.5;
+    overflow-x:hidden;
+    -webkit-font-smoothing:antialiased;
+  }
+  ::selection{background:var(--cyan-dim); color:#fff;}
+  a{color:inherit;text-decoration:none;}
+  ul{list-style:none;}
+  :focus-visible{outline:2px solid var(--cyan); outline-offset:3px;}
+  .display{font-family:"Anton",sans-serif; text-transform:uppercase; letter-spacing:0.01em;}
+  .mono{font-family:"JetBrains Mono",monospace;}
+  .container{max-width:1180px; margin:0 auto; padding:0 24px;}
+  section.pad{padding:110px 24px;}
+  @media (max-width:768px){section.pad{padding:70px 20px;}}
+
+  /* halftone texture used across ink panels */
+  .halftone{
+    background-image:radial-gradient(rgba(237,239,245,0.10) 1px, transparent 1.4px);
+    background-size:7px 7px;
+  }
+
+  /* ---------- 3D hero canvas ---------- */
+  #hero3d{
+    position:fixed; inset:0; z-index:0;
+    display:block;
+    background:radial-gradient(ellipse at 50% 20%, #0c1420 0%, #05070c 55%, #020304 100%);
+  }
+  .hero-noscript-fallback{display:none;}
+
+  /* ---------- nav ---------- */
+  header{
+    position:fixed; top:0; left:0; right:0; z-index:50;
+    border-bottom:1px solid var(--line);
+    background:rgba(5,7,12,0.72);
+    backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+  }
+  nav{display:flex; align-items:center; justify-content:space-between; padding:16px 24px; max-width:1180px; margin:0 auto;}
+  .logo{display:flex; align-items:center; gap:10px; font-family:"Anton",sans-serif; font-size:18px; letter-spacing:0.03em;}
+  .logo-mark{
+    width:30px; height:30px; position:relative;
+    display:flex; align-items:center; justify-content:center;
+    border:1.5px solid var(--cyan); transform:rotate(45deg);
+    box-shadow:0 0 16px var(--cyan-dim);
+  }
+  .logo-mark span{
+    transform:rotate(-45deg); width:6px; height:6px; background:var(--cyan);
+    box-shadow:0 0 8px var(--cyan);
+  }
+  .nav-links{display:flex; gap:30px; font-size:13.5px; color:var(--muted); font-family:"JetBrains Mono",monospace; letter-spacing:0.03em;}
+  .nav-links a{transition:color .2s var(--ease);}
+  .nav-links a:hover{color:var(--cyan);}
+  .btn{
+    display:inline-flex; align-items:center; gap:8px;
+    font-family:"JetBrains Mono",monospace; font-size:12.5px; font-weight:700; letter-spacing:0.05em; text-transform:uppercase;
+    padding:11px 20px; border:1.5px solid var(--cyan); background:transparent; color:var(--cyan);
+    cursor:pointer; transition:all .25s var(--ease); clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);
+  }
+  .btn:hover{background:var(--cyan); color:#020304; box-shadow:0 0 24px var(--cyan-dim);}
+  .btn.solid{background:var(--cyan); color:#020304; box-shadow:0 0 20px var(--cyan-dim);}
+  .btn.solid:hover{background:#4df0ff;}
+  .nav-toggle{display:none; background:none; border:none; color:var(--foreground); cursor:pointer;}
+  @media (max-width:820px){.nav-links{display:none;} .nav-toggle{display:block;}}
+
+  /* ---------- hero content ---------- */
+  .hero{
+    position:relative; z-index:1; min-height:100vh;
+    display:flex; flex-direction:column; justify-content:flex-end;
+    padding:24px 24px 90px;
+  }
+  .hero-content{max-width:640px;}
+  .hero-tag{
+    font-family:"JetBrains Mono",monospace; font-size:12px; letter-spacing:0.2em; color:var(--cyan);
+    display:flex; align-items:center; gap:10px; margin-bottom:20px;
+  }
+  .hero-tag::before{content:""; width:26px; height:1px; background:var(--cyan);}
+  h1.hero-title{
+    font-size:clamp(3rem,9vw,7.2rem); line-height:0.86;
+    color:var(--foreground);
+    text-shadow:0 0 40px rgba(0,229,255,0.15);
+  }
+  h1.hero-title .glow{color:var(--cyan); text-shadow:0 0 30px var(--cyan-dim),0 0 70px var(--cyan-dim);}
+  .hero p.lede{margin-top:22px; max-width:440px; color:var(--subtle); font-size:16px;}
+  .hero-ctas{margin-top:34px; display:flex; gap:14px; flex-wrap:wrap;}
+  .hero-scroll{
+    position:absolute; bottom:28px; left:24px;
+    font-family:"JetBrains Mono",monospace; font-size:11px; color:var(--muted); letter-spacing:0.15em;
+    display:flex; align-items:center; gap:10px;
+  }
+  .hero-scroll .bar{width:1px; height:26px; background:linear-gradient(var(--cyan),transparent); animation:scrollpulse 1.8s ease-in-out infinite;}
+  @keyframes scrollpulse{0%,100%{opacity:.3;}50%{opacity:1;}}
+
+  /* ---------- comic panel system ---------- */
+  .panel{
+    position:relative;
+    background:var(--bg-panel);
+    border:2px solid var(--ink);
+    box-shadow:6px 6px 0 rgba(0,0,0,0.55), 0 0 0 1px var(--line);
+  }
+  .panel::before{
+    content:""; position:absolute; inset:0; pointer-events:none;
+    background-image:radial-gradient(rgba(237,239,245,0.06) 1px, transparent 1.4px);
+    background-size:6px 6px;
+  }
+  .eyebrow{
+    display:inline-flex; align-items:center; gap:8px;
+    font-family:"JetBrains Mono",monospace; font-size:11px; letter-spacing:0.18em; text-transform:uppercase;
+    color:var(--muted);
+  }
+  .eyebrow::before{content:""; width:16px; height:2px; background:var(--cyan);}
+  .section-head{max-width:600px; margin:0 auto 56px; text-align:center;}
+  .section-head h2{font-size:clamp(2.1rem,4vw,3.2rem); margin-top:14px; letter-spacing:0.01em;}
+  .section-head p{margin-top:14px; color:var(--muted); font-size:15px;}
+
+  /* ---------- abilities grid ---------- */
+  .ability-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:22px; max-width:1180px; margin:0 auto;}
+  @media (max-width:900px){.ability-grid{grid-template-columns:repeat(2,1fr);}}
+  @media (max-width:520px){.ability-grid{grid-template-columns:1fr;}}
+  .ability-card{padding:28px 22px; transition:transform .3s var(--ease), box-shadow .3s var(--ease);}
+  .ability-card:nth-child(2){transform:rotate(-0.6deg);}
+  .ability-card:nth-child(3){transform:rotate(0.5deg);}
+  .ability-card:hover{transform:translateY(-6px) rotate(0deg); box-shadow:9px 9px 0 rgba(0,0,0,0.55), 0 0 40px var(--cyan-dim);}
+  .ability-num{font-family:"Anton",sans-serif; font-size:13px; color:var(--cyan); letter-spacing:0.1em;}
+  .ability-card h3{font-family:"Anton",sans-serif; font-size:22px; margin:14px 0 10px; text-transform:uppercase;}
+  .ability-card p{font-size:13.5px; color:var(--muted); line-height:1.6;}
+
+  /* ---------- origin split ---------- */
+  .origin{display:grid; grid-template-columns:0.85fr 1.15fr; gap:40px; max-width:1180px; margin:0 auto; align-items:center;}
+  @media (max-width:860px){.origin{grid-template-columns:1fr;}}
+  .origin-visual{
+    aspect-ratio:4/5; position:relative; overflow:hidden;
+    border:2px solid var(--ink); box-shadow:6px 6px 0 rgba(0,0,0,0.55);
+    background:
+      radial-gradient(circle at 40% 30%, rgba(0,229,255,0.16), transparent 55%),
+      radial-gradient(circle at 65% 75%, rgba(177,76,255,0.14), transparent 55%),
+      var(--bg-deep);
+  }
+  .origin-visual::before{
+    content:""; position:absolute; inset:0;
+    background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);
+    background-size:26px 26px;
+  }
+  .origin-visual .bolt{
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+    width:70px; height:110px;
+  }
+  .origin-visual .case-tag{
+    position:absolute; top:16px; left:16px; font-family:"JetBrains Mono",monospace; font-size:10.5px; color:var(--cyan); letter-spacing:0.1em;
+    padding:6px 10px; border:1px solid var(--cyan-dim); background:rgba(0,229,255,0.06);
+  }
+  .origin-text .eyebrow{margin-bottom:16px;}
+  .origin-text h2{font-family:"Anton",sans-serif; font-size:clamp(1.9rem,3.4vw,2.8rem); text-transform:uppercase; margin-bottom:20px;}
+  .origin-text p{color:var(--subtle); font-size:15.5px; margin-bottom:16px; max-width:520px;}
+  .origin-text p:last-of-type{margin-bottom:0;}
+  .origin-stats{display:flex; gap:32px; margin-top:28px; flex-wrap:wrap;}
+  .origin-stats div{font-family:"JetBrains Mono",monospace;}
+  .origin-stats .val{font-size:22px; color:var(--cyan); font-weight:700;}
+  .origin-stats .lbl{font-size:11px; color:var(--muted); letter-spacing:0.08em; text-transform:uppercase; margin-top:4px;}
+
+  /* ---------- incident log ---------- */
+  .log-wrap{max-width:820px; margin:0 auto;}
+  .log-entry{
+    display:grid; grid-template-columns:120px 1fr; gap:20px;
+    padding:22px 24px; border-bottom:1px dashed var(--line-strong);
+  }
+  .log-entry:first-child{border-top:1px dashed var(--line-strong);}
+  .log-id{font-family:"JetBrains Mono",monospace; font-size:12px; color:var(--cyan);}
+  .log-id .time{display:block; color:var(--muted); margin-top:4px; font-size:11px;}
+  .log-body h4{font-size:15.5px; font-weight:600; margin-bottom:6px;}
+  .log-body p{font-size:13.5px; color:var(--muted); line-height:1.6;}
+  .log-status{
+    display:inline-flex; align-items:center; gap:6px; margin-top:10px;
+    font-family:"JetBrains Mono",monospace; font-size:10.5px; letter-spacing:0.08em; text-transform:uppercase; color:var(--muted);
+  }
+  .log-status .d{width:6px; height:6px; border-radius:50%; background:var(--cyan); box-shadow:0 0 8px var(--cyan-dim);}
+  @media (max-width:560px){.log-entry{grid-template-columns:1fr;}}
+
+  /* ---------- CTA band ---------- */
+  .cta-band{
+    max-width:1180px; margin:0 auto; text-align:center; padding:70px 40px;
+    border:2px solid var(--ink); position:relative; overflow:hidden;
+    background:linear-gradient(180deg, rgba(0,229,255,0.06), transparent 70%), var(--bg-panel);
+    box-shadow:6px 6px 0 rgba(0,0,0,0.55);
+  }
+  .cta-band h2{font-family:"Anton",sans-serif; font-size:clamp(2rem,4vw,3rem); text-transform:uppercase; margin-bottom:16px;}
+  .cta-band p{color:var(--muted); max-width:440px; margin:0 auto 30px;}
+  .cta-band .hero-ctas{justify-content:center;}
+
+  /* ---------- footer ---------- */
+  footer{padding:56px 24px 36px; border-top:1px solid var(--line); background:var(--bg-deep); position:relative; z-index:1;}
+  .footer-grid{max-width:1180px; margin:0 auto; display:flex; justify-content:space-between; flex-wrap:wrap; gap:32px;}
+  .footer-brand p{color:var(--muted); font-size:13px; max-width:280px; margin-top:12px;}
+  .footer-cols{display:flex; gap:56px; flex-wrap:wrap;}
+  .footer-col h5{font-family:"JetBrains Mono",monospace; font-size:11px; letter-spacing:0.12em; text-transform:uppercase; color:var(--subtle); margin-bottom:14px;}
+  .footer-col a{display:block; font-size:13px; color:var(--muted); margin-bottom:10px; transition:color .2s;}
+  .footer-col a:hover{color:var(--cyan);}
+  .footer-bottom{max-width:1180px; margin:40px auto 0; padding-top:22px; border-top:1px solid var(--line); display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px; font-size:11.5px; color:var(--muted); font-family:"JetBrains Mono",monospace;}
+
+  .reveal{opacity:0; transform:translateY(22px); transition:opacity .7s var(--ease), transform .7s var(--ease);}
+  .reveal.in{opacity:1; transform:translateY(0);}
+
+  @media (prefers-reduced-motion: reduce){
+    *{animation-duration:.001ms !important; transition-duration:.001ms !important; scroll-behavior:auto !important;}
+  }
+</style>
+</head>
+<body>
+
+<canvas id="hero3d"></canvas>
+
+<header>
+  <nav>
+    <a href="#top" class="logo"><span class="logo-mark"><span></span></span> NIGHTGRID</a>
+    <div class="nav-links">
+      <a href="#abilities">Abilities</a>
+      <a href="#origin">Origin</a>
+      <a href="#log">Incident Log</a>
+    </div>
+    <a href="#join" class="btn">Report a Blackout</a>
+  </nav>
+</header>
+
+<main id="top">
+
+  <section class="hero" id="hero">
+    <div class="hero-content">
+      <p class="hero-tag">MERIDIAN CITY · GRID SECTOR 7</p>
+      <h1 class="hero-title display">HE RUNS<br>ON THE<br><span class="glow">CURRENT.</span></h1>
+      <p class="lede">When the lights go out in Meridian, something else switches on. Nightgrid moves through the city on tethers of raw current — rooftop to rooftop, streetlamp to streetlamp — faster than the blackout can spread.</p>
+      <div class="hero-ctas">
+        <a href="#origin" class="btn solid">Read the origin</a>
+        <a href="#log" class="btn">View incident log</a>
+      </div>
+    </div>
+    <div class="hero-scroll"><span class="bar"></span>SCROLL</div>
+  </section>
+
+  <section class="pad" id="abilities">
+    <div class="container">
+      <div class="section-head reveal">
+        <p class="eyebrow" style="justify-content:center;">FIELD CAPABILITIES</p>
+        <h2 class="display">What he can do</h2>
+        <p>Every ability draws from the same source — Meridian's power grid itself.</p>
+      </div>
+      <div class="ability-grid reveal">
+        <div class="panel ability-card">
+          <span class="ability-num mono">01</span>
+          <h3>Arc Tether</h3>
+          <p>Pulls a line of live current from any powered fixture and rides it — the way other people would use a rope, if the rope moved at three hundred feet per second.</p>
+        </div>
+        <div class="panel ability-card">
+          <span class="ability-num mono">02</span>
+          <h3>Current Walk</h3>
+          <p>Travels along active power lines and rail conduits undetected, reading the city's grid like a street map only he can see.</p>
+        </div>
+        <div class="panel ability-card">
+          <span class="ability-num mono">03</span>
+          <h3>Grid Sight</h3>
+          <p>Sees load spikes, dead circuits, and tampered lines from blocks away — usually the first sign that something's wrong before anyone calls it in.</p>
+        </div>
+        <div class="panel ability-card">
+          <span class="ability-num mono">04</span>
+          <h3>Overload Pulse</h3>
+          <p>A short, controlled discharge strong enough to drop a locked door or a hostile — and weak enough not to touch anyone standing near it.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="pad" id="origin">
+    <div class="container">
+      <div class="origin reveal">
+        <div class="origin-visual">
+          <span class="case-tag mono">FILE 004-B</span>
+          <svg class="bolt" viewBox="0 0 70 110" fill="none">
+            <path d="M40 2 L8 60 H32 L26 108 L64 44 H38 L40 2Z" stroke="#00E5FF" stroke-width="2.5" fill="rgba(0,229,255,0.08)"/>
+          </svg>
+        </div>
+        <div class="origin-text">
+          <p class="eyebrow">CASE FILE 004-B · REDACTED</p>
+          <h2>Grew up in the dark, literally</h2>
+          <p>Sector 7 lost power for eleven days the winter he was fourteen — a "budget shortfall," the city said. He remembers exactly which apartments still had light and which didn't, and he's never stopped keeping that list.</p>
+          <p>A substation accident three years later should have killed him. Instead, it left him able to feel the grid the way most people feel a pulse — where it's strong, where it's failing, and where someone's about to cut it on purpose.</p>
+          <p>He doesn't fix the wiring. He shows up when someone tries to use the dark as cover.</p>
+          <div class="origin-stats">
+            <div><div class="val">7</div><div class="lbl">Sector patrolled</div></div>
+            <div><div class="val">2.1s</div><div class="lbl">Avg. tether deploy</div></div>
+            <div><div class="val">3 yrs</div><div class="lbl">Active service</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="pad" id="log">
+    <div class="container">
+      <div class="section-head reveal">
+        <p class="eyebrow" style="justify-content:center;">CITIZEN REPORTS</p>
+        <h2 class="display">Incident log</h2>
+        <p>Unverified sightings, logged as they come in from Sector 7 dispatch.</p>
+      </div>
+      <div class="log-wrap panel reveal">
+        <div class="log-entry">
+          <div class="log-id">#0417-C<span class="time">23:41 · Elm &amp; 9th</span></div>
+          <div class="log-body">
+            <h4>Substation break-in, Elm Street</h4>
+            <p>"Power came back on mid-robbery — like someone flipped it on just to see them clearly. By the time security showed up, both guys were already zip-tied to the fence."</p>
+            <div class="log-status"><span class="d"></span>Confirmed by MCPD</div>
+          </div>
+        </div>
+        <div class="log-entry">
+          <div class="log-id">#0398-A<span class="time">02:15 · Rail Yard 3</span></div>
+          <div class="log-body">
+            <h4>Rooftop sighting, freight line</h4>
+            <p>"Watched something move along the overhead wire faster than the train under it. My phone camera couldn't keep up — got three seconds of blue light and gone."</p>
+            <div class="log-status"><span class="d"></span>Unverified</div>
+          </div>
+        </div>
+        <div class="log-entry">
+          <div class="log-id">#0402-B<span class="time">19:58 · Meridian General</span></div>
+          <div class="log-body">
+            <h4>Backup generator, Meridian General ER</h4>
+            <p>"Generator failed during a storm surge. It came back on in under four seconds — the maintenance crew swears they hadn't even gotten to the panel yet."</p>
+            <div class="log-status"><span class="d"></span>Confirmed by hospital staff</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="pad" id="join">
+    <div class="cta-band reveal">
+      <h2>See something dark, say something</h2>
+      <p>Sector 7 dispatch logs every report. Not every one gets a response — but the pattern matters more than any single call.</p>
+      <div class="hero-ctas">
+        <a href="#" class="btn solid">File a report</a>
+        <a href="#log" class="btn">Read past incidents</a>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="footer-grid">
+    <div class="footer-brand">
+      <a href="#top" class="logo"><span class="logo-mark"><span></span></span> NIGHTGRID</a>
+      <p>An original vigilante story set in Meridian City. Fan-made concept site — not affiliated with any studio or publisher.</p>
+    </div>
+    <div class="footer-cols">
+      <div class="footer-col">
+        <h5>Explore</h5>
+        <a href="#abilities">Abilities</a>
+        <a href="#origin">Origin</a>
+        <a href="#log">Incident log</a>
+      </div>
+      <div class="footer-col">
+        <h5>Dispatch</h5>
+        <a href="#join">File a report</a>
+        <a href="#">Sector map</a>
+      </div>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>© 2026 NIGHTGRID · MERIDIAN CITY DISPATCH</span>
+    <span>Original character &amp; design concept — built as a demo.</span>
+  </div>
+</footer>
+
+<script type="module">
+  import * as THREE from 'three';
+
+  const canvas = document.getElementById('hero3d');
+  const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  try {
+    const scene = new THREE.Scene();
+    const bgColor = new THREE.Color(0x05070c);
+    scene.fog = new THREE.FogExp2(0x05070c, 0.018);
+
+    const camera = new THREE.PerspectiveCamera(52, window.innerWidth / window.innerHeight, 0.1, 200);
+    camera.position.set(0, 4, 26);
+
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setClearColor(bgColor, 1);
+
+    // ---------- lights ----------
+    scene.add(new THREE.AmbientLight(0x1a2233, 1.1));
+    const cyanLight = new THREE.PointLight(0x00e5ff, 6, 60);
+    cyanLight.position.set(-8, 6, 6);
+    scene.add(cyanLight);
+    const magentaLight = new THREE.PointLight(0xb14cff, 4, 60);
+    magentaLight.position.set(10, -2, -4);
+    scene.add(magentaLight);
+
+    // ---------- skyline ----------
+    const cityGroup = new THREE.Group();
+    const buildingMat = new THREE.MeshStandardMaterial({ color: 0x0a0e16, roughness: 0.85, metalness: 0.15 });
+    const windowMat = new THREE.MeshBasicMaterial({ color: 0x00e5ff });
+    const windowMatM = new THREE.MeshBasicMaterial({ color: 0xb14cff });
+
+    for (let i = 0; i < 42; i++) {
+      const w = 1 + Math.random() * 1.6;
+      const h = 2 + Math.random() * 9;
+      const d = 1 + Math.random() * 1.6;
+      const box = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), buildingMat);
+      const angle = Math.random() * Math.PI * 2;
+      const radius = 14 + Math.random() * 22;
+      box.position.set(Math.cos(angle) * radius, h / 2 - 6, Math.sin(angle) * radius - 6);
+      cityGroup.add(box);
+
+      if (Math.random() > 0.4) {
+        const wGeo = new THREE.BoxGeometry(w * 0.15, h * 0.15, 0.05);
+        const winMat = Math.random() > 0.5 ? windowMat : windowMatM;
+        const win = new THREE.Mesh(wGeo, winMat);
+        win.position.set(box.position.x, box.position.y + h * 0.2, box.position.z + d / 2 + 0.03);
+        cityGroup.add(win);
+      }
+    }
+    scene.add(cityGroup);
+
+    // ---------- insignia (lightning bolt in a ring) ----------
+    const insigniaGroup = new THREE.Group();
+
+    const boltShape = new THREE.Shape();
+    boltShape.moveTo(0.05, 0.9);
+    boltShape.lineTo(-0.55, -0.05);
+    boltShape.lineTo(-0.1, -0.05);
+    boltShape.lineTo(-0.25, -0.9);
+    boltShape.lineTo(0.55, 0.15);
+    boltShape.lineTo(0.1, 0.15);
+    boltShape.lineTo(0.05, 0.9);
+    const boltGeo = new THREE.ExtrudeGeometry(boltShape, { depth: 0.18, bevelEnabled: true, bevelThickness: 0.03, bevelSize: 0.02, bevelSegments: 2 });
+    const boltMat = new THREE.MeshStandardMaterial({ color: 0x00e5ff, emissive: 0x00e5ff, emissiveIntensity: 1.4, roughness: 0.3, metalness: 0.4 });
+    const bolt = new THREE.Mesh(boltGeo, boltMat);
+    bolt.scale.setScalar(1.9);
+    insigniaGroup.add(bolt);
+
+    const ringGeo = new THREE.TorusGeometry(2.6, 0.045, 16, 100);
+    const ringMat = new THREE.MeshStandardMaterial({ color: 0xb14cff, emissive: 0xb14cff, emissiveIntensity: 1.0, roughness: 0.4 });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    insigniaGroup.add(ring);
+
+    const ring2 = new THREE.Mesh(new THREE.TorusGeometry(3.2, 0.02, 16, 100), new THREE.MeshStandardMaterial({ color: 0x00e5ff, emissive: 0x00e5ff, emissiveIntensity: 0.7 }));
+    ring2.rotation.x = Math.PI / 2.4;
+    insigniaGroup.add(ring2);
+
+    insigniaGroup.position.set(0, 3, -2);
+    scene.add(insigniaGroup);
+
+    // ---------- particles (sparks) ----------
+    const particleCount = 260;
+    const positions = new Float32Array(particleCount * 3);
+    const speeds = new Float32Array(particleCount);
+    for (let i = 0; i < particleCount; i++) {
+      positions[i * 3] = (Math.random() - 0.5) * 60;
+      positions[i * 3 + 1] = Math.random() * 30 - 8;
+      positions[i * 3 + 2] = (Math.random() - 0.5) * 60;
+      speeds[i] = 0.01 + Math.random() * 0.03;
+    }
+    const particleGeo = new THREE.BufferGeometry();
+    particleGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const particleMat = new THREE.PointsMaterial({ color: 0x00e5ff, size: 0.09, transparent: true, opacity: 0.75, blending: THREE.AdditiveBlending, depthWrite: false });
+    const particles = new THREE.Points(particleGeo, particleMat);
+    scene.add(particles);
+
+    // ---------- interaction state ----------
+    let mouseX = 0, mouseY = 0, targetRotY = 0, targetRotX = 0;
+    window.addEventListener('mousemove', (e) => {
+      mouseX = (e.clientX / window.innerWidth) - 0.5;
+      mouseY = (e.clientY / window.innerHeight) - 0.5;
+    }, { passive: true });
+
+    let scrollProgress = 0;
+    function updateScroll() {
+      const heroEl = document.getElementById('hero');
+      const h = heroEl.offsetHeight;
+      scrollProgress = Math.min(1, Math.max(0, window.scrollY / h));
+    }
+    window.addEventListener('scroll', updateScroll, { passive: true });
+    updateScroll();
+
+    function resize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+    window.addEventListener('resize', resize);
+
+    const clock = new THREE.Clock();
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const t = clock.getElapsedTime();
+
+      if (!prefersReduced) {
+        insigniaGroup.rotation.y = t * 0.35;
+        ring.rotation.z = t * 0.2;
+        ring2.rotation.y = t * 0.25;
+        cityGroup.rotation.y = t * 0.015;
+
+        const posAttr = particleGeo.attributes.position;
+        for (let i = 0; i < particleCount; i++) {
+          posAttr.array[i * 3 + 1] += speeds[i];
+          if (posAttr.array[i * 3 + 1] > 22) posAttr.array[i * 3 + 1] = -8;
+        }
+        posAttr.needsUpdate = true;
+
+        targetRotY = mouseX * 0.4;
+        targetRotX = mouseY * 0.2;
+      }
+
+      // camera cinematic dolly tied to scroll + gentle mouse parallax
+      camera.position.x += ((targetRotY * 4) - camera.position.x) * 0.04;
+      camera.position.y += ((4 - targetRotX * 3) - (camera.position.y - scrollProgress * 3)) * 0.04 - scrollProgress * 0.02;
+      camera.position.z = 26 - scrollProgress * 14;
+      camera.lookAt(0, 3 - scrollProgress * 1.5, -2);
+
+      cyanLight.position.x = Math.sin(t * 0.5) * 10 - 8;
+      magentaLight.position.z = Math.cos(t * 0.4) * 10 - 4;
+
+      renderer.render(scene, camera);
+    }
+    animate();
+  } catch (err) {
+    console.warn('3D scene unavailable, falling back to static background.', err);
+  }
+</script>
+
+<script>
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => {
+      if (entry.isIntersecting) { entry.target.classList.add('in'); io.unobserve(entry.target); }
+    });
+  }, { threshold: 0.12 });
+  document.querySelectorAll('.reveal').forEach((el) => io.observe(el));
+</script>
+
+</body>
+</html>
